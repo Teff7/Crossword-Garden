@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Daily 5×5 Cryptic</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Hidden input to capture mobile keystrokes -->
+  <input id="mobileInput" inputmode="text" maxlength="1" autocomplete="off" autocapitalize="characters"
+         style="opacity:0; position:absolute; left:-10000px;" />
+
+  <!-- Welcome / Landing -->
+  <section id="welcome" class="welcome-screen">
+    <h1 class="brand">Daily 5×5 Cryptic</h1>
+
+    <div class="roadmap" aria-label="Roadmap">
+      <div class="road-item" data-tip="Phase 1: MVP — one puzzle/day, JSON storage, sharing.">
+        <svg viewBox="0 0 24 24" class="icon"><path d="M12 2l3 7h7l-5.5 4 2 7L12 16l-6.5 4 2-7L2 9h7z"/></svg>
+      </div>
+      <div class="road-item" data-tip="Phase 2: Whānau Studio — dev, clue design, social, testing.">
+        <svg viewBox="0 0 24 24" class="icon"><path d="M12 12a5 5 0 100-10 5 5 0 000 10zm-7 9v-2a5 5 0 015-5h4a5 5 0 015 5v2H5z"/></svg>
+      </div>
+      <div class="road-item" data-tip="Phase 3: Growth — ko-fi/patreon, themes, leaderboards, community clues.">
+        <svg viewBox="0 0 24 24" class="icon"><path d="M12 21s-6-3.35-9-7.5C-0.04 9.82 2.64 4 7.5 4A5.5 5.5 0 0112 6.09 5.5 5.5 0 0116.5 4C21.36 4 24.04 9.82 21 13.5 18 17.65 12 21 12 21z"/></svg>
+      </div>
+      <div class="road-item" data-tip="Phase 4: Full Studio — branding, more games, schools & libraries, premium packs.">
+        <svg viewBox="0 0 24 24" class="icon"><path d="M5 22l7-3 7 3V3l-7 3-7-3z"/></svg>
+      </div>
+    </div>
+
+    <div class="welcome-actions">
+      <button class="play-button" id="btnPlay" onclick="startGame()">Play today’s puzzle</button>
+      <button class="help-button" id="btnHelp">Help</button>
+    </div>
+  </section>
+
+  <!-- Game -->
+  <section id="game" class="game-screen" hidden>
+    <!-- TOP: centered date and Menu -->
+    <div class="top-bar">
+      <div class="top-center">
+        <div id="puzzleDate" class="date"></div>
+        <div class="dropdown" id="topMenuWrap">
+          <button class="help-button small" id="btnMenu" aria-haspopup="true" aria-expanded="false">Menu ▾</button>
+          <div class="menu" id="menuPanel" role="menu" aria-hidden="true">
+            <button class="menu-item" id="menuHelp" role="menuitem">Help</button>
+            <button class="menu-item" id="menuRestart" role="menuitem">Restart</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grid -->
+    <div id="grid" class="grid" role="application" aria-label="5 by 5 crossword grid"></div>
+
+    <!-- Clue panel (stays between grid and bottom buttons) -->
+    <div id="cluePanel" class="clue-panel">
+      <div id="clueHeader" class="clue-header">—</div>
+      <div id="clueText" class="clue"></div>
+    </div>
+
+    <!-- BOTTOM: centered gameplay buttons -->
+    <div class="bottom-actions">
+      <div class="dropdown" id="hintDropdown">
+        <button class="help-button small" id="btnHints" aria-haspopup="true" aria-expanded="false">Hints ▾</button>
+        <div class="menu" id="hintMenu" role="menu" aria-hidden="true">
+          <button class="menu-item" id="hintDef" role="menuitem">Definition</button>
+          <button class="menu-item" id="hintLetter" role="menuitem">Reveal a letter</button>
+          <button class="menu-item" id="hintWordplay" role="menuitem">Reveal the trick</button>
+        </div>
+      </div>
+
+      <button class="help-button small" id="btnGiveUp" title="Reveal this entry">Reveal answer</button>
+      <button class="help-button small" id="btnShare" title="Copy share result">Share your glory</button>
+      <button class="help-button small" id="btnHelpBottom">Help (no judgement)</button>
+    </div>
+  </section>
+
+  <!-- Help modal -->
+  <div id="helpModal" class="modal" hidden>
+    <div class="modal-card">
+      <button class="modal-close" id="helpClose" aria-label="Close">×</button>
+      <h2>How cryptic crosswords work (and how this game teaches them)</h2>
+      <p>Each clue has two halves:</p>
+      <ul>
+        <li><strong>Definition</strong> — plain meaning of the answer.</li>
+        <li><strong>Wordplay</strong> — instructions to build the answer (e.g., anagram, container, hidden).</li>
+      </ul>
+      <p>Use the <em>Hints</em> menu if you’re learning:</p>
+      <ul>
+        <li><strong>Definition</strong> highlights the definition part.</li>
+        <li><strong>Reveal a letter</strong> fills a random empty cell in the entry.</li>
+        <li><strong>Reveal the trick</strong> colours and tool-tips the indicator and fodder.</li>
+      </ul>
+      <p>Click a numbered square to switch between Across and Down on that start square. Type moves the cursor; Backspace moves back. When an entry is correct, it locks in. “Reveal answer” will fill it.</p>
+    </div>
+  </div>
+
+  <div id="fireworks" class="fireworks" aria-hidden="true"></div>
+
+  <!-- No inline puzzle JSON: everything is loaded from CLUES.JSON via script.js -->
+  <script src="script.js?v=5"></script>
+</body>
+</html>
