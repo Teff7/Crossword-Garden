@@ -1,6 +1,6 @@
 
 // script.js — updated to load from the new CLUES JSON and map Crossword `000001`
-const FILE = '/CLUES.JSON'; // exact filename uploaded
+const FILE = 'CLUES.JSON'; // exact filename uploaded
 const DEFAULT_CROSSWORD_ID = '000001';
 
 // Elements
@@ -584,4 +584,5 @@ window.addEventListener('load', () => {
       setCurrentEntry(puzzle.entries[0]);
     });
 });
+
 
