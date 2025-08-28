@@ -522,10 +522,16 @@ window.addEventListener('load', () => {
       buildGrid();
       placeEntries();
       setCurrentEntry((puzzle.entries || [])[0]);
+      hasLoaded = true;  // mark that puzzle loaded successfully
     })
     .catch(err => {
-      console.warn('Failed to load puzzle data:', err);
-      // Show error message bar at top of screen
+     console.warn('Failed to load puzzle data:', err);
+if (!hasLoaded) {
+  // Show error banner ...
+  const messageBar = document.createElement('div');
+  ...
+  document.body.appendChild(messageBar);
+     // Show error message bar at top of screen
       const messageBar = document.createElement('div');
       messageBar.textContent = 'Error loading puzzle data. Please try again later.';
       messageBar.style.position = 'fixed';
@@ -550,3 +556,4 @@ window.addEventListener('load', () => {
       }
     });
 });
+
