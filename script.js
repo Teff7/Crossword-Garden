@@ -540,21 +540,6 @@ window.addEventListener('load', () => {
     .catch(err => {
       console.warn('Failed to load puzzle data:', err);
 
-      // Only show the banner if nothing rendered yet
-      if (!hasLoaded) {
-        const messageBar = document.createElement('div');
-        messageBar.textContent = 'Error loading puzzle data. Please try again later.';
-        messageBar.style.position = 'fixed';
-        messageBar.style.top = '0';
-        messageBar.style.left = '0';
-        messageBar.style.right = '0';
-        messageBar.style.background = 'red';
-        messageBar.style.color = 'white';
-        messageBar.style.padding = '5px';
-        messageBar.style.textAlign = 'center';
-        messageBar.style.zIndex = '1000';
-        document.body.appendChild(messageBar);
-
         if (DEBUG_FALLBACK) {
           puzzle = {
             id: 'fallback',
@@ -574,3 +559,4 @@ window.addEventListener('load', () => {
       // If hasLoaded is true, do nothing else — puzzle already on screen.
     });
 });
+
