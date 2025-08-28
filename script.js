@@ -1,8 +1,7 @@
-
 // script.js — updated to load from the new CLUES JSON and map Crossword `000001`
 const FILE = 'CLUES.JSON'; // exact filename uploaded
 const DEFAULT_CROSSWORD_ID = '000001';
-fetch(FILE, { cache: 'no-store' }) // or add ?t=Date.now() while testing
+const DEBUG_FALLBACK = false; // set to true to enable fallback puzzle for debugging
 
 // Elements
 const welcome = document.getElementById('welcome');
@@ -192,7 +191,7 @@ function buildAnnotatedHTML(surface, annotations, opts){
     // Find first occurrence (case sensitive); if not found try case-insensitive
     let start = surface.indexOf(text);
     if (start < 0){
-      const re = new RegExp(text.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&'), 'i');
+      const re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       const m = surface.match(re);
       if (m) start = m.index;
     }
@@ -338,126 +337,54 @@ function setupHandlers(){
   const openHelp = () => { if (helpModal) helpModal.hidden = false; };
   const closeHelp = () => { if (helpModal) helpModal.hidden = true; };
   if (btnHelp) btnHelp.addEventListener('click', openHelp);
-  if (btnHelpGame) btnHelpGame && btnHelpGame.addEventListener('click', openHelp);
+  if (btnHelpGame) btnHelpGame.addEventListener('click', openHelp);
   if (btnHelpBottom) btnHelpBottom.addEventListener('click', openHelp);
   if (helpClose) helpClose.addEventListener('click', closeHelp);
 
-  // Hints dropdown
+  // Hints dropdown toggle
   if (btnHints) btnHints.addEventListener('click', () => {
-    const expanded = btnHints.getAttribute('aria-expanded') === 'true';
-    btnHints.setAttribute('aria-expanded', String(!expanded));
-    if (hintMenu) hintMenu.setAttribute('aria-hidden', String(expanded));
-    if (hintDropdown){
-      if (expanded) hintDropdown.classList.remove('open'); else hintDropdown.classList.add('open');
-    }
+    const isOpen = hintDropdown.classList.toggle('open');
+    if (btnHints) btnHints.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    if (hintMenu) hintMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
   });
+  if (hintMenu) hintMenu.addEventListener('click', e => {
+    e.stopPropagation(); // Keep menu open when clicking inside
+  });
+  // Specific hint actions
   if (btnHintDef) btnHintDef.addEventListener('click', () => {
-    showDefOnly = !showDefOnly;
-    clueTextEl.classList.toggle('help-on', showDefOnly);
-    if (currentEntry) renderClue(currentEntry);
+    clueTextEl.classList.add('help-on');
+    clueTextEl.classList.remove('annot-on');
+    showAnnot = false;
+    showDefOnly = true;
   });
   if (btnHintLetter) btnHintLetter.addEventListener('click', () => {
     if (!currentEntry) return;
-    const empties = currentEntry.cells.map((c,i)=>c.letter?null:i).filter(i=>i!==null);
-    if (!empties.length) return;
-    const idx = empties[Math.floor(Math.random()*empties.length)];
-    currentEntry.cells[idx].letter = currentEntry.answer[idx];
-    currentEntry.iActive = idx;
-    activeCellKey = key(currentEntry.cells[idx].r, currentEntry.cells[idx].c);
-    renderLetters();
+    // Fill the first empty cell of currentEntry
+    const empty = currentEntry.cells.find(c => !c.letter);
+    if (empty) {
+      empty.letter = empty.answer || '';
+      renderLetters();
+    }
   });
   if (btnHintAnalyse) btnHintAnalyse.addEventListener('click', () => {
-    showAnnot = !showAnnot;
-    clueTextEl.classList.toggle('annot-on', showAnnot);
-    if (currentEntry) renderClue(currentEntry);
+    clueTextEl.classList.add('annot-on');
+    clueTextEl.classList.remove('help-on');
+    showAnnot = true;
+    showDefOnly = false;
   });
 
-  // Top Menu dropdown
+  // Menu open/close
   if (btnMenu) btnMenu.addEventListener('click', () => {
-    const expanded = btnMenu.getAttribute('aria-expanded') === 'true';
-    btnMenu.setAttribute('aria-expanded', String(!expanded));
-    if (menuPanel) menuPanel.setAttribute('aria-hidden', String(expanded));
-    if (topMenuWrap){
-      if (expanded) topMenuWrap.classList.remove('open'); else topMenuWrap.classList.add('open');
-    }
+    const isOpen = topMenuWrap.classList.toggle('open');
+    btnMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    menuPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
   });
-  if (menuHelp) menuHelp.addEventListener('click', () => {
-    openHelp();
-  });
-  if (menuRestart) menuRestart.addEventListener('click', () => {
-    restartGame();
-    if (btnMenu) btnMenu.setAttribute('aria-expanded','false');
-    if (menuPanel) menuPanel.setAttribute('aria-hidden','true');
-    if (topMenuWrap) topMenuWrap.classList.remove('open');
-  });
-
-  // Reveal answer
-  if (btnGiveUp) btnGiveUp.addEventListener('click', () => {
-    if (!currentEntry) return;
-    currentEntry.cells.forEach((cell, idx) => {
-      cell.letter = currentEntry.answer[idx];
-    });
-    renderLetters();
-    submitAnswer();
-  });
-
-  // Share result
-  if (btnShare) btnShare.addEventListener('click', () => {
-    if (!puzzle) return;
-    const rows = [];
-    for (let r = 0; r < grid.length; r++) {
-      let row = '';
-      for (let c = 0; c < grid[r].length; c++) {
-        const cell = grid[r][c];
-        if (cell.block) row += '⬛';
-        else if (cell.letter) row += cell.letter;
-        else row += '⬜';
-      }
-      rows.push(row);
-    }
-    const header = `Daily 5×5 Cryptic ${puzzle.id ? '('+puzzle.id+')' : ''}`.trim();
-    const shareText = header + '\n' + rows.join('\n');
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(shareText).then(() => {
-        alert('Copied your grid to the clipboard!');
-      }).catch(err => {
-        console.warn('Clipboard copy failed', err);
-        alert('Unable to copy your results');
-      });
-    } else {
-      const temp = document.createElement('textarea');
-      temp.value = shareText;
-      temp.style.position = 'fixed';
-      temp.style.top = '-1000px';
-      document.body.appendChild(temp);
-      temp.focus();
-      temp.select();
-      try {
-        document.execCommand('copy');
-        alert('Copied your grid to the clipboard!');
-      } catch (e) {
-        alert('Unable to copy your results');
-      }
-      document.body.removeChild(temp);
-    }
-  });
-
-  // Close dropdowns when clicking outside
-  document.addEventListener('click', (e) => {
-    const t = e.target;
-    if (hintDropdown && !hintDropdown.contains(t)){
-      if (hintDropdown.classList.contains('open')){
-        hintDropdown.classList.remove('open');
-        if (btnHints) btnHints.setAttribute('aria-expanded','false');
-        if (hintMenu) hintMenu.setAttribute('aria-hidden','true');
-      }
-    }
-    if (topMenuWrap && !topMenuWrap.contains(t)){
-      if (topMenuWrap.classList.contains('open')){
-        topMenuWrap.classList.remove('open');
-        if (btnMenu) btnMenu.setAttribute('aria-expanded','false');
-        if (menuPanel) menuPanel.setAttribute('aria-hidden','true');
-      }
+  // Close menu if clicking outside
+  document.addEventListener('click', e => {
+    if (!topMenuWrap.contains(e.target)){
+      topMenuWrap.classList.remove('open');
+      if (btnMenu) btnMenu.setAttribute('aria-expanded','false');
+      if (menuPanel) menuPanel.setAttribute('aria-hidden','true');
     }
   });
 
@@ -562,10 +489,33 @@ function buildPuzzleFromBook(book, crosswordId){
 window.addEventListener('load', () => {
   setupHandlers();
 
-  fetch(FILE)
+  fetch(FILE, { cache: 'no-store' })
     .then(r => {
-      if (!r.ok) throw new Error(`Failed to load ${FILE}: ${r.status}`);
-      return r.json();
+      const url = r.url;
+      const status = r.status;
+      const contentType = r.headers.get('content-type') || '';
+      return r.text().then(text => {
+        console.log(`Fetch URL: ${url}`);
+        console.log(`Status code: ${status}`);
+        console.log(`Content-Type: ${contentType}`);
+        console.log(`First 200 characters of response: ${text.slice(0, 200)}`);
+        if (!r.ok) {
+          console.error(`Fetch failed with status ${status}`);
+          throw new Error(`Failed to load ${FILE}: ${status}`);
+        }
+        if (contentType.includes('text/html') || text.trim().startsWith('<')) {
+          console.error('Response appears to be HTML, not valid JSON.');
+          throw new Error('Invalid response content type');
+        }
+        let json;
+        try {
+          json = JSON.parse(text);
+        } catch (e) {
+          console.error('JSON parse error:', e);
+          throw e;
+        }
+        return json;
+      });
     })
     .then(json => {
       puzzle = buildPuzzleFromBook(json, DEFAULT_CROSSWORD_ID);
@@ -574,18 +524,29 @@ window.addEventListener('load', () => {
       setCurrentEntry((puzzle.entries || [])[0]);
     })
     .catch(err => {
-      console.warn('Failed to load new CLUES JSON:', err);
-      puzzle = {
-        id: 'fallback',
-        grid: { rows: 5, cols: 5, blocks: [] },
-        entries: [{ id: '1A', direction: 'across', row: 0, col: 0, answer: 'HELLO', surface: 'Wave politely (5)', category:'charade', annotations: [] }]
-      };
-      buildGrid();
-      placeEntries();
-      setCurrentEntry(puzzle.entries[0]);
+      console.warn('Failed to load puzzle data:', err);
+      // Show error message bar at top of screen
+      const messageBar = document.createElement('div');
+      messageBar.textContent = 'Error loading puzzle data. Please try again later.';
+      messageBar.style.position = 'fixed';
+      messageBar.style.top = '0';
+      messageBar.style.left = '0';
+      messageBar.style.right = '0';
+      messageBar.style.background = 'red';
+      messageBar.style.color = 'white';
+      messageBar.style.padding = '5px';
+      messageBar.style.textAlign = 'center';
+      messageBar.style.zIndex = '1000';
+      document.body.appendChild(messageBar);
+      if (DEBUG_FALLBACK) {
+        puzzle = {
+          id: 'fallback',
+          grid: { rows: 5, cols: 5, blocks: [] },
+          entries: [{ id: '1A', direction: 'across', row: 0, col: 0, answer: 'HELLO', surface: 'Wave politely (5)', category: 'charade', annotations: [] }]
+        };
+        buildGrid();
+        placeEntries();
+        setCurrentEntry(puzzle.entries[0]);
+      }
     });
 });
-
-
-
-
