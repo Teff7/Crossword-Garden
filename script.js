@@ -1,8 +1,8 @@
-// script.js — game loads straight away, no welcome screen
+// script.js — robust loader; always renders something
 
 const FILE = 'CLUES.JSON';
 const DEFAULT_CROSSWORD_ID = '000001';
-const DEBUG_FALLBACK = false; // set true to show a demo puzzle on load failure
+const ENABLE_FALLBACK = true; // keep true until you're 100% sure JSON loads in prod
 
 // Elements
 const game = document.getElementById('game');
@@ -13,27 +13,14 @@ const mobileInput = document.getElementById('mobileInput');
 const topMenuWrap = document.getElementById('topMenuWrap');
 const btnMenu = document.getElementById('btnMenu');
 const menuPanel = document.getElementById('menuPanel');
-const menuHelp = document.getElementById('menuHelp');
 const menuRestart = document.getElementById('menuRestart');
 const hintDropdown = document.getElementById('hintDropdown');
-const puzzleDateEl = document.getElementById('puzzleDate');
-
-// Help + Hints
-const btnHelp = document.getElementById('btnHelp');
-const btnHelpGame = document.getElementById('btnHelpGame');
-const btnHelpBottom = document.getElementById('btnHelpBottom');
-const helpModal = document.getElementById('helpModal');
-const helpClose = document.getElementById('helpClose');
-
-const btnHints = document.getElementById('btnHints');
 const hintMenu = document.getElementById('hintMenu');
 const btnHintDef = document.getElementById('hintDef');
 const btnHintLetter = document.getElementById('hintLetter');
 const btnHintAnalyse = document.getElementById('hintWordplay');
-
 const btnBack = document.getElementById('btnBack');
-const btnGiveUp = document.getElementById('btnGiveUp');
-const btnShare = document.getElementById('btnShare');
+const puzzleDateEl = document.getElementById('puzzleDate');
 
 // State
 let puzzle = null;
@@ -46,13 +33,28 @@ let lastClickedCellKey = null;
 const dirToggle = new Map();
 let showAnnot = false;
 let showDefOnly = false;
-let hasLoaded = false; // true after a successful render
+let hasLoaded = false;
 
-// fixed 5×5 template used by the 3×3 clue layout
+// Fixed 5×5 template
 const GRID_TEMPLATE = {
   rows: 5, cols: 5,
   blocks: [[1,1],[1,3],[3,1],[3,3]],
   numbers: { all: [[0,0,'1'],[0,2,'2'],[0,4,'3'],[2,0,'2'],[4,0,'3']] }
+};
+
+// Minimal fallback “always render” puzzle (safe while you debug hosting)
+const MINI_FALLBACK = {
+  id: 'fallback',
+  grid: { rows: 5, cols: 5, blocks: [] },
+  entries: [{
+    id: '1A', direction: 'across', row: 0, col: 0,
+    answer: 'HELLO',
+    surface: 'Wave politely (5)',
+    category: 'lit',
+    annotations: [
+      { kind: 'definition', text: 'Wave politely', tooltip: 'Definition' }
+    ]
+  }]
 };
 
 const TIP = {
@@ -63,12 +65,15 @@ const TIP = {
   charade: 'Build from parts.',
   reversal: 'Reverse the letters.',
   container: 'Find it within.',
-  lit: 'Whole clue is both definition and wordplay.'
+  lit: 'Whole clue is both definition and wordplay.',
+  definition: 'Definition of the answer.',
+  fodder: 'Letters used to build the answer.',
+  indicator: 'Word telling you what to do.'
 };
 
 function key(r,c){ return `${r},${c}`; }
 
-// ----- Grid build -----
+// ---------- GRID ----------
 function buildGrid(){
   const { rows, cols, blocks = [], numbers = {} } = puzzle.grid;
   const blockSet = new Set(blocks.map(([r,c]) => key(r,c)));
@@ -91,8 +96,7 @@ function buildGrid(){
     grid.push(rowArr);
   }
 
-  // Numbers (if present)
-  const all = numbers.all || [];
+  const all = (numbers.all || []);
   all.forEach(([r,c,label]) => {
     const cell = cellMap.get(key(r,c));
     if (!cell || cell.block) return;
@@ -107,12 +111,12 @@ function buildGrid(){
 function placeEntries(){
   entries = (puzzle.entries||[]).map(e => ({
     id: e.id,
-    direction: e.direction, // 'across'|'down'
+    direction: e.direction,
     row: e.row,
     col: e.col,
     answer: String(e.answer||'').toUpperCase(),
-    surface: e.surface,
-    category: e.category,
+    surface: e.surface || '',
+    category: e.category || '',
     annotations: e.annotations || [],
     cells: [],
     iActive: 0
@@ -130,68 +134,58 @@ function placeEntries(){
   });
 }
 
+// ---------- CLUE RENDER ----------
 function renderClue(ent){
   if (!ent) return;
   const dirLabel = ent.direction[0].toUpperCase() + ent.direction.slice(1);
-  if (clueHeaderEl) clueHeaderEl.textContent = `${ent.id} — ${dirLabel}`;
+  clueHeaderEl.textContent = `${ent.id} — ${dirLabel}`;
 
-  // Base class + clue type for colour scheme
   const typeClass = ent.category || '';
-  if (clueTextEl) {
-    // preserve current mode classes set by buttons
-    const keepAnnot = clueTextEl.classList.contains('annot-on');
-    const keepHelp = clueTextEl.classList.contains('help-on');
-    clueTextEl.className = `clue ${typeClass}`;
-    if (keepAnnot) clueTextEl.classList.add('annot-on');
-    if (keepHelp) clueTextEl.classList.add('help-on');
+  const keepAnnot = clueTextEl.classList.contains('annot-on');
+  const keepHelp = clueTextEl.classList.contains('help-on');
+  clueTextEl.className = `clue ${typeClass}`;
+  if (keepAnnot) clueTextEl.classList.add('annot-on');
+  if (keepHelp) clueTextEl.classList.add('help-on');
 
-    const html = buildAnnotatedHTML(ent.surface, ent.annotations, {
-      annotate: showAnnot,
-      defOnly: showDefOnly
-    });
-    clueTextEl.innerHTML = html;
-  }
+  const html = buildAnnotatedHTML(ent.surface, ent.annotations, {
+    annotate: showAnnot,
+    defOnly: showDefOnly
+  });
+  clueTextEl.innerHTML = html;
 }
 
 function buildAnnotatedHTML(surface, annotations, opts){
   const { annotate=false, defOnly=false } = opts || {};
-  if (!annotate && !defOnly){
-    return escapeHtml(surface || '');
-  }
+  if (!annotate && !defOnly) return escapeHtml(surface||'');
+
   const spans = [];
+  const sfc = String(surface||'');
+  const allowed = (annotations||[]).filter(a => defOnly ? a.kind==='definition' : true);
+
   function overlaps(a,b){ return !(a[1] <= b[0] || b[1] <= a[0]); }
 
-  const allowed = (annotations||[]).filter(a => {
-    if (defOnly) return a.kind === 'definition';
-    return true;
-  });
-
-  const sfc = String(surface || '');
   allowed.forEach(a => {
-    const text = String(a.text || '');
+    const text = String(a.text||'');
     if (!text) return;
-    let start = sfc.indexOf(text); // case-sensitive first
+    let start = sfc.indexOf(text);
     if (start < 0){
-      const re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      const re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i');
       const m = sfc.match(re);
       if (m) start = m.index;
     }
     if (start < 0) return;
     const end = start + text.length;
-    const klass = (a.kind === 'definition' ? 'def' : (a.kind === 'fodder' ? 'fodder' : 'indicator'));
+    const klass = (a.kind==='definition' ? 'def' : a.kind==='fodder' ? 'fodder' : 'indicator');
     spans.push({ start, end, klass, tip: a.tooltip || TIP[a.kind] || '', text });
   });
 
   spans.sort((x,y)=> x.start - y.start || y.end - x.end);
   const final = [];
   spans.forEach(s => {
-    if (final.every(f => !overlaps([s.start,s.end],[f.start,f.end]))){
-      final.push(s);
-    }
+    if (final.every(f => !overlaps([s.start,s.end],[f.start,f.end]))) final.push(s);
   });
 
-  let out = '';
-  let pos = 0;
+  let out = ''; let pos = 0;
   final.forEach(s => {
     if (pos < s.start) out += escapeHtml(sfc.slice(pos, s.start));
     out += `<span class="${s.klass}" data-tooltip="${escapeHtml(s.tip||'')}">${escapeHtml(sfc.slice(s.start, s.end))}</span>`;
@@ -201,9 +195,9 @@ function buildAnnotatedHTML(surface, annotations, opts){
   return out;
 }
 
+// ---------- LETTERS ----------
 function renderLetters(){
   grid.flat().forEach(cell => {
-    // keep numbers, clear letters
     [...cell.el.childNodes].forEach(n => {
       if (n.nodeType === 1 && n.classList.contains('num')) return;
       cell.el.removeChild(n);
@@ -230,6 +224,7 @@ function setCurrentEntry(ent, fromCellKey=null){
   currentEntry = ent;
   if (!ent) return;
   if (puzzleDateEl) puzzleDateEl.textContent = `Crossword ${puzzle.id || DEFAULT_CROSSWORD_ID}`;
+
   if (fromCellKey){
     const i = ent.cells.findIndex(c => key(c.r,c.c)===fromCellKey);
     ent.iActive = (i>=0 ? i : 0);
@@ -313,16 +308,10 @@ function finishGame(){
   if (fireworks) fireworks.classList.add('on');
 }
 
-// ----- Help & hints & misc -----
+// ---------- HINTS + UI ----------
 function setupHandlers(){
-  const openHelp = () => { if (helpModal) helpModal.hidden = false; };
-  const closeHelp = () => { if (helpModal) helpModal.hidden = true; };
-  if (btnHelp) btnHelp.addEventListener('click', openHelp);
-  if (btnHelpGame) btnHelpGame.addEventListener('click', openHelp);
-  if (btnHelpBottom) btnHelpBottom.addEventListener('click', openHelp);
-  if (helpClose) helpClose.addEventListener('click', closeHelp);
-
   // Hints dropdown toggle
+  const btnHints = document.getElementById('btnHints');
   if (btnHints && hintDropdown && hintMenu) {
     btnHints.addEventListener('click', () => {
       const isOpen = hintDropdown.classList.toggle('open');
@@ -334,7 +323,6 @@ function setupHandlers(){
 
   // Definition only
   if (btnHintDef) btnHintDef.addEventListener('click', () => {
-    if (!clueTextEl) return;
     clueTextEl.classList.add('help-on');
     clueTextEl.classList.remove('annot-on');
     showAnnot = false;
@@ -348,4 +336,168 @@ function setupHandlers(){
     const i = currentEntry.cells.findIndex(c => !c.letter);
     if (i >= 0) {
       const ch = currentEntry.answer[i] || '';
-      currentEntry.cells[i].lett
+      currentEntry.cells[i].letter = ch.toUpperCase();
+      currentEntry.iActive = i;
+      renderLetters();
+    }
+  });
+
+  // Analyse / reveal the trick
+  if (btnHintAnalyse) btnHintAnalyse.addEventListener('click', () => {
+    clueTextEl.classList.add('annot-on');
+    clueTextEl.classList.remove('help-on');
+    showAnnot = true;
+    showDefOnly = false;
+    if (currentEntry) renderClue(currentEntry);
+  });
+
+  // Menu open/close
+  if (btnMenu && topMenuWrap && menuPanel) {
+    btnMenu.addEventListener('click', () => {
+      const isOpen = topMenuWrap.classList.toggle('open');
+      btnMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      menuPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    });
+    document.addEventListener('click', e => {
+      if (!topMenuWrap.contains(e.target)){
+        topMenuWrap.classList.remove('open');
+        btnMenu.setAttribute('aria-expanded','false');
+        menuPanel.setAttribute('aria-hidden','true');
+      }
+    });
+  }
+
+  // Back hides game (safe no-op if no welcome)
+  if (btnBack) btnBack.addEventListener('click', () => {
+    if (game) game.hidden = true;
+  });
+
+  // Typing
+  if (mobileInput) mobileInput.addEventListener('input', e => {
+    const char = e.data || e.target.value;
+    if (/^[a-zA-Z]$/.test(char)) typeChar(char);
+    e.target.value = '';
+  });
+  document.addEventListener('keydown', e => {
+    if (/^[a-zA-Z]$/.test(e.key)) typeChar(e.key);
+    else if (e.key === 'Backspace'){ e.preventDefault(); backspace(); }
+    else if (e.key === 'Enter'){ submitAnswer(); }
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ nextCell(-1); renderLetters(); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown'){ nextCell(+1); renderLetters(); }
+  });
+}
+
+function restartGame(){
+  entries.forEach(ent => ent.cells.forEach(c => { c.letter = ''; }));
+  showAnnot = false;
+  showDefOnly = false;
+  clueTextEl.classList.remove('annot-on','help-on');
+  setCurrentEntry(entries[0]);
+  renderLetters();
+}
+
+function escapeHtml(s=''){
+  return String(s).replace(/[&<>"']/g, m => (
+    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]
+  ));
+}
+
+// ---------- JSON -> PUZZLE ----------
+function normaliseType(t){
+  if (!t) return '';
+  const x = String(t).toLowerCase().trim();
+  if (x === 'literally' || x === '&lit' || x === 'lit') return 'lit';
+  return x;
+}
+
+function parseAnnotations(row){
+  const ann = [];
+  for (let i=0; i<5; i++){
+    const suffix = i===0 ? '' : `.${i}`;
+    const type = row[`Tooltip_${i+1}_type`];
+    const section = row[`Tooltip_section${suffix}`];
+    const text = row[`Tooltip_Text${suffix}`];
+    if (!type || !section) continue;
+    ann.push({ kind: normaliseType(type), text: String(section), tooltip: String(text||'') });
+  }
+  return ann;
+}
+
+function buildPuzzleFromBook(book, crosswordId){
+  const rows = (((book||{}).sheets||[])[0]||{}).rows||[];
+  // primary filter
+  let wanted = rows.filter(r => String(r['Crossword']).trim() === String(crosswordId).trim());
+
+  // safety: if no rows matched id, take first 6 rows so we still render
+  if (!wanted.length) wanted = rows.slice(0, 6);
+
+  const acrossRows = wanted.filter(r => String(r['Position']).toUpperCase()==='A');
+  const downRows   = wanted.filter(r => String(r['Position']).toUpperCase()==='D');
+
+  const AC_ROWS = [0,2,4];
+  const AC_COL = 0;
+  const DN_ROW = 0;
+  const DN_COLS = [0,2,4];
+
+  const makeEntry = (r, idx, isAcross) => {
+    const id = `${idx+1}${isAcross?'A':'D'}`;
+    const direction = isAcross ? 'across' : 'down';
+    const row = isAcross ? AC_ROWS[idx] : DN_ROW;
+    const col = isAcross ? AC_COL : DN_COLS[idx];
+    return {
+      id, direction, row, col,
+      answer: String(r['Solution']||'').toUpperCase(),
+      surface: String(r['Clue']||''),
+      category: normaliseType(r['Clue Type']),
+      annotations: parseAnnotations(r)
+    };
+  };
+
+  const entries = [
+    ...acrossRows.slice(0,3).map((r,i)=>makeEntry(r,i,true)),
+    ...downRows.slice(0,3).map((r,i)=>makeEntry(r,i,false))
+  ];
+
+  return {
+    id: crosswordId,
+    grid: GRID_TEMPLATE,
+    entries
+  };
+}
+
+// ---------- BOOT ----------
+window.addEventListener('load', () => {
+  // game is visible immediately (no welcome section)
+  setupHandlers();
+
+  fetch(FILE, { cache: 'no-store' })
+    .then(async (r) => {
+      const ct = r.headers.get('content-type') || '';
+      const body = await r.text();
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      if (ct.includes('text/html') || body.trim().startsWith('<')) {
+        throw new Error('Got HTML instead of JSON');
+      }
+      let json;
+      try { json = JSON.parse(body); }
+      catch (e) { throw new Error('JSON parse error: ' + e.message); }
+      return json;
+    })
+    .then(json => {
+      puzzle = buildPuzzleFromBook(json, DEFAULT_CROSSWORD_ID);
+      buildGrid();
+      placeEntries();
+      setCurrentEntry((puzzle.entries || [])[0]);
+      hasLoaded = true;
+    })
+    .catch(err => {
+      console.warn('[CLUES] load failed:', err);
+      if (ENABLE_FALLBACK && !hasLoaded) {
+        puzzle = MINI_FALLBACK;
+        buildGrid();
+        placeEntries();
+        setCurrentEntry(puzzle.entries[0]);
+        hasLoaded = true;
+      }
+    });
+});
