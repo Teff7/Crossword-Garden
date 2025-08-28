@@ -525,35 +525,39 @@ window.addEventListener('load', () => {
       hasLoaded = true;  // mark that puzzle loaded successfully
     })
     .catch(err => {
-     console.warn('Failed to load puzzle data:', err);
-if (!hasLoaded) {
-  // Show error banner ...
-  const messageBar = document.createElement('div');
-  ...
-  document.body.appendChild(messageBar);
-     // Show error message bar at top of screen
-      const messageBar = document.createElement('div');
-      messageBar.textContent = 'Error loading puzzle data. Please try again later.';
-      messageBar.style.position = 'fixed';
-      messageBar.style.top = '0';
-      messageBar.style.left = '0';
-      messageBar.style.right = '0';
-      messageBar.style.background = 'red';
-      messageBar.style.color = 'white';
-      messageBar.style.padding = '5px';
-      messageBar.style.textAlign = 'center';
-      messageBar.style.zIndex = '1000';
-      document.body.appendChild(messageBar);
-      if (DEBUG_FALLBACK) {
-        puzzle = {
-          id: 'fallback',
-          grid: { rows: 5, cols: 5, blocks: [] },
-          entries: [{ id: '1A', direction: 'across', row: 0, col: 0, answer: 'HELLO', surface: 'Wave politely (5)', category: 'charade', annotations: [] }]
-        };
-        buildGrid();
-        placeEntries();
-        setCurrentEntry(puzzle.entries[0]);
-      }
-    });
+  console.warn('Failed to load puzzle data:', err);
+
+  if (!hasLoaded) {
+    // Show error message bar at top of screen
+    const messageBar = document.createElement('div');
+    messageBar.textContent = 'Error loading puzzle data. Please try again later.';
+    messageBar.style.position = 'fixed';
+    messageBar.style.top = '0';
+    messageBar.style.left = '0';
+    messageBar.style.right = '0';
+    messageBar.style.background = 'red';
+    messageBar.style.color = 'white';
+    messageBar.style.padding = '5px';
+    messageBar.style.textAlign = 'center';
+    messageBar.style.zIndex = '1000';
+    document.body.appendChild(messageBar);
+
+    if (DEBUG_FALLBACK) {
+      puzzle = {
+        id: 'fallback',
+        grid: { rows: 5, cols: 5, blocks: [] },
+        entries: [{
+          id: '1A', direction: 'across', row: 0, col: 0,
+          answer: 'HELLO', surface: 'Wave politely (5)',
+          category: 'charade', annotations: []
+        }]
+      };
+      buildGrid();
+      placeEntries();
+      setCurrentEntry(puzzle.entries[0]);
+    }
+  }
 });
+
+
 
