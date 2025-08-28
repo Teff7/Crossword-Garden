@@ -1,18 +1,15 @@
-// script.js
-// Loads CLUES.JSON and maps Crossword `000001` into a fixed 5×5 grid.
+// script.js — game loads straight away, no welcome screen
 
 const FILE = 'CLUES.JSON';
 const DEFAULT_CROSSWORD_ID = '000001';
-const DEBUG_FALLBACK = false; // set true only if you want the demo puzzle on error
+const DEBUG_FALLBACK = false; // set true to show a demo puzzle on load failure
 
 // Elements
-const welcome = document.getElementById('welcome');
 const game = document.getElementById('game');
 const gridEl = document.getElementById('grid');
 const clueHeaderEl = document.getElementById('clueHeader');
 const clueTextEl = document.getElementById('clueText');
 const mobileInput = document.getElementById('mobileInput');
-const btnPlay = document.getElementById('btnPlay');
 const topMenuWrap = document.getElementById('topMenuWrap');
 const btnMenu = document.getElementById('btnMenu');
 const menuPanel = document.getElementById('menuPanel');
@@ -35,8 +32,6 @@ const btnHintLetter = document.getElementById('hintLetter');
 const btnHintAnalyse = document.getElementById('hintWordplay');
 
 const btnBack = document.getElementById('btnBack');
-
-// Optional extras
 const btnGiveUp = document.getElementById('btnGiveUp');
 const btnShare = document.getElementById('btnShare');
 
@@ -51,7 +46,7 @@ let lastClickedCellKey = null;
 const dirToggle = new Map();
 let showAnnot = false;
 let showDefOnly = false;
-let hasLoaded = false; // only show error banner if this stays false
+let hasLoaded = false; // true after a successful render
 
 // fixed 5×5 template used by the 3×3 clue layout
 const GRID_TEMPLATE = {
@@ -72,15 +67,6 @@ const TIP = {
 };
 
 function key(r,c){ return `${r},${c}`; }
-
-// Start button
-function startGame(){
-  if (welcome) welcome.hidden = true;
-  if (game) game.hidden = false;
-  if (mobileInput) mobileInput.focus();
-}
-window.startGame = startGame;
-if (btnPlay) btnPlay.addEventListener('click', startGame);
 
 // ----- Grid build -----
 function buildGrid(){
@@ -126,7 +112,7 @@ function placeEntries(){
     col: e.col,
     answer: String(e.answer||'').toUpperCase(),
     surface: e.surface,
-    category: e.category, // for per-type colour
+    category: e.category,
     annotations: e.annotations || [],
     cells: [],
     iActive: 0
@@ -152,7 +138,7 @@ function renderClue(ent){
   // Base class + clue type for colour scheme
   const typeClass = ent.category || '';
   if (clueTextEl) {
-    // keep any annot/help classes already set by buttons
+    // preserve current mode classes set by buttons
     const keepAnnot = clueTextEl.classList.contains('annot-on');
     const keepHelp = clueTextEl.classList.contains('help-on');
     clueTextEl.className = `clue ${typeClass}`;
@@ -180,26 +166,22 @@ function buildAnnotatedHTML(surface, annotations, opts){
     return true;
   });
 
-  // Build index list
   const sfc = String(surface || '');
   allowed.forEach(a => {
     const text = String(a.text || '');
     if (!text) return;
-    // Try case-sensitive first
-    let start = sfc.indexOf(text);
-    // If not found, try case-insensitive
+    let start = sfc.indexOf(text); // case-sensitive first
     if (start < 0){
       const re = new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       const m = sfc.match(re);
       if (m) start = m.index;
     }
-    if (start < 0) return; // skip this annotation if not found
+    if (start < 0) return;
     const end = start + text.length;
     const klass = (a.kind === 'definition' ? 'def' : (a.kind === 'fodder' ? 'fodder' : 'indicator'));
     spans.push({ start, end, klass, tip: a.tooltip || TIP[a.kind] || '', text });
   });
 
-  // Sort and drop overlaps (keep earlier, longer spans)
   spans.sort((x,y)=> x.start - y.start || y.end - x.end);
   const final = [];
   spans.forEach(s => {
@@ -208,7 +190,6 @@ function buildAnnotatedHTML(surface, annotations, opts){
     }
   });
 
-  // Stitch output
   let out = '';
   let pos = 0;
   final.forEach(s => {
@@ -348,7 +329,6 @@ function setupHandlers(){
       btnHints.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
       hintMenu.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
     });
-    // keep menu open when clicking inside
     hintMenu.addEventListener('click', e => e.stopPropagation());
   }
 
@@ -368,195 +348,4 @@ function setupHandlers(){
     const i = currentEntry.cells.findIndex(c => !c.letter);
     if (i >= 0) {
       const ch = currentEntry.answer[i] || '';
-      currentEntry.cells[i].letter = ch.toUpperCase();
-      currentEntry.iActive = i;
-      renderLetters();
-    }
-  });
-
-  // Analyse / reveal the trick
-  if (btnHintAnalyse) btnHintAnalyse.addEventListener('click', () => {
-    if (!clueTextEl) return;
-    clueTextEl.classList.add('annot-on');
-    clueTextEl.classList.remove('help-on');
-    showAnnot = true;
-    showDefOnly = false;
-    if (currentEntry) renderClue(currentEntry);
-  });
-
-  // Menu open/close
-  if (btnMenu && topMenuWrap && menuPanel) {
-    btnMenu.addEventListener('click', () => {
-      const isOpen = topMenuWrap.classList.toggle('open');
-      btnMenu.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-      menuPanel.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
-    });
-    document.addEventListener('click', e => {
-      if (!topMenuWrap.contains(e.target)){
-        topMenuWrap.classList.remove('open');
-        btnMenu.setAttribute('aria-expanded','false');
-        menuPanel.setAttribute('aria-hidden','true');
-      }
-    });
-  }
-
-  // Back
-  if (btnBack) btnBack.addEventListener('click', () => {
-    if (game) game.hidden = true;
-    if (welcome) welcome.hidden = false;
-  });
-
-  // Typing
-  if (mobileInput) mobileInput.addEventListener('input', e => {
-    const char = e.data || e.target.value;
-    if (/^[a-zA-Z]$/.test(char)) typeChar(char);
-    e.target.value = '';
-  });
-  document.addEventListener('keydown', e => {
-    if (/^[a-zA-Z]$/.test(e.key)) typeChar(e.key);
-    else if (e.key === 'Backspace'){ e.preventDefault(); backspace(); }
-    else if (e.key === 'Enter'){ submitAnswer(); }
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ nextCell(-1); renderLetters(); }
-    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown'){ nextCell(+1); renderLetters(); }
-  });
-
-  // Optional: restart/share wiring if present
-  if (menuRestart) menuRestart.addEventListener('click', () => restartGame());
-  if (btnShare) btnShare.addEventListener('click', () => {
-    try {
-      const text = renderShareText();
-      navigator.clipboard?.writeText(text);
-      alert('Copied results to clipboard.');
-    } catch { /* ignore */ }
-  });
-}
-
-function restartGame(){
-  entries.forEach(ent => ent.cells.forEach(c => { c.letter = ''; }));
-  showAnnot = false;
-  showDefOnly = false;
-  if (clueTextEl) clueTextEl.classList.remove('annot-on','help-on');
-  setCurrentEntry(entries[0]);
-  renderLetters();
-}
-
-function renderShareText(){
-  const rows = puzzle.grid.rows, cols = puzzle.grid.cols;
-  let s = '';
-  for (let r=0;r<rows;r++){
-    for (let c=0;c<cols;c++){
-      const cell = cellMap.get(key(r,c));
-      s += cell.block ? '⬛' : (cell.letter ? cell.letter : '⬜');
-    }
-    s += '\n';
-  }
-  return s.trim();
-}
-
-function escapeHtml(s=''){
-  return String(s).replace(/[&<>"']/g, m => (
-    {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[m]
-  ));
-}
-
-// ----- Data mapping: CLUES JSON -> puzzle object -----
-function normaliseType(t){
-  if (!t) return '';
-  const x = String(t).toLowerCase().trim();
-  if (x === 'literally' || x === '&lit' || x === 'lit') return 'lit';
-  return x;
-}
-function parseAnnotations(row){
-  const ann = [];
-  for (let i=0; i<5; i++){
-    const suffix = i===0 ? '' : `.${i}`;
-    const type = row[`Tooltip_${i+1}_type`];
-    const section = row[`Tooltip_section${suffix}`];
-    const text = row[`Tooltip_Text${suffix}`];
-    if (!type || !section) continue;
-    ann.push({
-      kind: normaliseType(type),
-      text: String(section),
-      tooltip: String(text || '')
-    });
-  }
-  return ann;
-}
-function buildPuzzleFromBook(book, crosswordId){
-  const rows = (((book||{}).sheets||[])[0]||{}).rows||[];
-  const wanted = rows.filter(r => String(r['Crossword']) === String(crosswordId));
-  const acrossRows = wanted.filter(r => String(r['Position']).toUpperCase()==='A');
-  const downRows   = wanted.filter(r => String(r['Position']).toUpperCase()==='D');
-
-  // map fixed coordinates
-  const AC_ROWS = [0,2,4];
-  const AC_COL = 0;
-  const DN_ROW = 0;
-  const DN_COLS = [0,2,4];
-
-  const makeEntry = (r, idx, isAcross) => {
-    const id = `${idx+1}${isAcross?'A':'D'}`;
-    const direction = isAcross ? 'across' : 'down';
-    const row = isAcross ? AC_ROWS[idx] : DN_ROW;
-    const col = isAcross ? AC_COL : DN_COLS[idx];
-    const category = normaliseType(r['Clue Type']);
-    return {
-      id, direction, row, col,
-      answer: String(r['Solution']||'').toUpperCase(),
-      surface: String(r['Clue']||''),
-      category,
-      annotations: parseAnnotations(r)
-    };
-  };
-
-  const entries = [
-    ...acrossRows.map((r,i)=>makeEntry(r,i,true)),
-    ...downRows.map((r,i)=>makeEntry(r,i,false))
-  ];
-
-  return {
-    id: crosswordId,
-    grid: GRID_TEMPLATE,
-    entries
-  };
-}
-
-// ----- Boot -----
-window.addEventListener('load', () => {
-  setupHandlers();
-
-  fetch(FILE, { cache: 'no-store' })
-    .then(r => {
-      if (!r.ok) throw new Error(`Failed to load ${FILE}: ${r.status}`);
-      return r.json();
-    })
-    .then(json => {
-      puzzle = buildPuzzleFromBook(json, DEFAULT_CROSSWORD_ID);
-      buildGrid();
-      placeEntries();
-      setCurrentEntry((puzzle.entries || [])[0]);
-      hasLoaded = true; // success
-    })
-    .catch(err => {
-      console.warn('Failed to load puzzle data:', err);
-
-        if (DEBUG_FALLBACK) {
-          puzzle = {
-            id: 'fallback',
-            grid: { rows: 5, cols: 5, blocks: [] },
-            entries: [{
-              id: '1A', direction: 'across', row: 0, col: 0,
-              answer: 'HELLO', surface: 'Wave politely (5)',
-              category: 'charade', annotations: []
-            }]
-          };
-          buildGrid();
-          placeEntries();
-          setCurrentEntry(puzzle.entries[0]);
-          hasLoaded = true; // we did render something
-        }
-      }
-      // If hasLoaded is true, do nothing else — puzzle already on screen.
-    });
-});
-
+      currentEntry.cells[i].lett
