@@ -119,7 +119,8 @@ function placeEntries(){
     category: e.category || '',
     annotations: e.annotations || [],
     cells: [],
-    iActive: 0
+    iActive: 0,
+    solved: false
   }));
 
   entries.forEach(ent => {
@@ -269,6 +270,43 @@ function nextCell(inc){
   return cell;
 }
 
+function moveCursor(dir){
+  if (!activeCellKey) return;
+  const [r,c] = activeCellKey.split(',').map(Number);
+  const deltas = {
+    left: [0,-1], right: [0,1], up: [-1,0], down: [1,0]
+  };
+  const d = deltas[dir];
+  if (!d) return;
+  let nr = r + d[0], nc = c + d[1];
+  while (true){
+    const cell = cellMap.get(key(nr,nc));
+    if (!cell) return; // out of bounds
+    if (!cell.block) break;
+    nr += d[0]; nc += d[1];
+  }
+  const newKey = key(nr,nc);
+  const cell = cellMap.get(newKey);
+  const pref = (dir==='left' || dir==='right') ? 'across' : 'down';
+  const ent = cell.entries.find(e => e.direction===pref) || cell.entries[0];
+  setCurrentEntry(ent, newKey);
+}
+
+function isEntrySolved(ent){
+  if (ent.solved) return true;
+  const guess = ent.cells.map(c => (c.letter||'').toUpperCase()).join('');
+  return guess === ent.answer.toUpperCase();
+}
+
+function findNextUnsolved(startIdx){
+  const total = entries.length;
+  for (let offset = 1; offset <= total; offset++){
+    const ent = entries[(startIdx + offset) % total];
+    if (!isEntrySolved(ent)) return ent;
+  }
+  return null;
+}
+
 function typeChar(ch){
   if (!currentEntry) return;
   const cell = currentEntry.cells[currentEntry.iActive];
@@ -293,8 +331,9 @@ function submitAnswer(){
     game.classList.add('flash-green');
     setTimeout(() => {
       game.classList.remove('flash-green');
+      currentEntry.solved = true;
       const idx = entries.indexOf(currentEntry);
-      const next = entries[idx+1];
+      const next = findNextUnsolved(idx);
       if (next) setCurrentEntry(next); else finishGame();
     }, 650);
   } else {
@@ -382,17 +421,23 @@ function setupHandlers(){
     if (/^[a-zA-Z]$/.test(e.key)) typeChar(e.key);
     else if (e.key === 'Backspace'){ e.preventDefault(); backspace(); }
     else if (e.key === 'Enter'){ submitAnswer(); }
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp'){ nextCell(-1); renderLetters(); }
-    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown'){ nextCell(+1); renderLetters(); }
+    else if (e.key === 'ArrowLeft'){ e.preventDefault(); moveCursor('left'); }
+    else if (e.key === 'ArrowRight'){ e.preventDefault(); moveCursor('right'); }
+    else if (e.key === 'ArrowUp'){ e.preventDefault(); moveCursor('up'); }
+    else if (e.key === 'ArrowDown'){ e.preventDefault(); moveCursor('down'); }
   });
 }
 
 function restartGame(){
-  entries.forEach(ent => ent.cells.forEach(c => { c.letter = ''; }));
+  entries.forEach(ent => {
+    ent.solved = false;
+    ent.cells.forEach(c => { c.letter = ''; });
+  });
   showAnnot = false;
   showDefOnly = false;
   clueTextEl.classList.remove('annot-on','help-on');
-  setCurrentEntry(entries[0]);
+  const first = entries.find(e => e.cells.some(c => c.r===0 && c.c===0)) || entries[0];
+  setCurrentEntry(first, key(0,0));
   renderLetters();
 }
 
@@ -487,7 +532,8 @@ window.addEventListener('load', () => {
       puzzle = buildPuzzleFromBook(json, DEFAULT_CROSSWORD_ID);
       buildGrid();
       placeEntries();
-      setCurrentEntry((puzzle.entries || [])[0]);
+      const first = entries.find(e => e.cells.some(c => c.r===0 && c.c===0)) || (puzzle.entries || [])[0];
+      setCurrentEntry(first, key(0,0));
       hasLoaded = true;
     })
     .catch(err => {
@@ -496,7 +542,8 @@ window.addEventListener('load', () => {
         puzzle = MINI_FALLBACK;
         buildGrid();
         placeEntries();
-        setCurrentEntry(puzzle.entries[0]);
+        const first = entries.find(e => e.cells.some(c => c.r===0 && c.c===0)) || puzzle.entries[0];
+        setCurrentEntry(first, key(0,0));
         hasLoaded = true;
       }
     });
